@@ -1,0 +1,93 @@
+import os
+import cv2
+import numpy as np
+import pyttsx3
+
+
+def speak(text):
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 130)
+    engine.setProperty('volume', 0.8)
+    engine.say(text)
+    engine.runAndWait()
+
+
+data_path = "C:\\Users\\AYUSHI\\OneDrive\\Desktop\\Face_recognition\\samples"
+face_classifier = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+
+Training_Data, Labels = [], []
+
+for file_name in os.listdir(data_path):
+    image_path = os.path.join(data_path, file_name)
+    if not os.path.isfile(image_path):
+        continue
+
+    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        continue
+
+    faces = face_classifier.detectMultiScale(img, 1.3, 5)
+    if len(faces) == 0:
+        continue
+
+    (x, y, w, h) = faces[0]
+    face_img = cv2.resize(img[y:y+h, x:x+w], (200, 200))
+    Training_Data.append(np.asarray(face_img, dtype=np.uint8))
+    Labels.append(int(file_name.split("_")[1].split(".")[0]))
+
+Labels = np.asarray(Labels, dtype=np.int32)
+
+# Create LBPH face recognizer using cv2.face.LBPHFaceRecognizer_create()
+model = cv2.face.LBPHFaceRecognizer_create()
+model.train(Training_Data, Labels)
+
+print("the model is TRAINED ")
+
+def face_detector(img, size=0.5):
+    global roi
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_classifier.detectMultiScale(gray, 1.3, 5)
+
+    if len(faces) == 0:
+        return img, []
+
+    for (x, y, w, h) in faces:
+        cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 255), 2)
+        roi = img[y: y + h, x: x + w]
+        roi = cv2.resize(roi, (200, 200))
+
+    return img, roi
+
+
+cap = cv2.VideoCapture(0)
+while True:
+    ret, frame = cap.read()
+    image, face = face_detector(frame)
+
+    try:
+        face = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+        result = model.predict(face)
+
+        if result[1] < 500:
+            confidence = int(100 * (1 - (result[1]) / 300))
+            display_string = str(confidence) + '% confidence it is user'
+            cv2.putText(image, display_string, (100, 120), cv2.FONT_HERSHEY_SIMPLEX, 1, (250, 120, 255), 2)
+
+        if confidence > 65:
+            cv2.putText(image, "HELLO USER", (250, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.imshow("Face Cropper", image)
+        else:
+            cv2.putText(image, "CAN'T RECOGNIZE", (250, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cv2.imshow("Face Cropper", image)
+
+    except:
+        speak("Face not found")
+        cv2.putText(image, "Face not Found", (250, 450), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+
+        cv2.imshow("Face Cropper", image)
+        pass
+
+    if cv2.waitKey(1) == ord('q'):
+        break
+cap.release()
+cv2.destroyAllWindows()
